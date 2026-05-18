@@ -21,10 +21,10 @@ The project does not yet contain application source files. Suggested future stru
 
 ```text
 .
-├── README.md
-├── src/
-├── tests/
-└── docs/
++-- README.md
++-- src/
++-- tests/
+`-- docs/
 ```
 
 ## Roadmap
