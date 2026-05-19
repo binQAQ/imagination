@@ -55,29 +55,55 @@ ${description}
 export async function generateImage(prompt) {
   assertApiKey();
 
-  const data = await callOpenAI("/images/generations", {
-    model: IMAGE_MODEL,
-    prompt,
-    n: 1,
-    size: "1024x1024",
-    quality: "high",
-    response_format: "b64_json",
+  const data = await callOpenAI(`/models/openai/${IMAGE_MODEL}/predictions`, {
+    input: {
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "high",
+      moderation: "low",
+      background: "auto",
+      output_format: "png",
+    },
   });
 
-  const imageBase64 = data.data?.[0]?.b64_json;
-  const imageUrl = data.data?.[0]?.url;
+  return extractImageBase64(data);
+}
 
-  if (imageBase64) {
-    return imageBase64;
+function extractImageBase64(data) {
+  const openAICompatible = data.data?.[0];
+
+  if (openAICompatible?.b64_json) {
+    return openAICompatible.b64_json;
   }
 
-  if (imageUrl) {
-    return imageUrlToBase64(imageUrl);
+  if (openAICompatible?.url) {
+    return imageUrlToBase64(openAICompatible.url);
   }
 
-  if (!imageBase64 && !imageUrl) {
-    throw new Error("No generated image returned from OpenAI");
+  const output = data.output?.[0] || data.images?.[0] || data.image;
+
+  if (typeof output === "string") {
+    if (output.startsWith("http")) {
+      return imageUrlToBase64(output);
+    }
+
+    return stripDataUrlPrefix(output);
   }
+
+  if (output?.url) {
+    return imageUrlToBase64(output.url);
+  }
+
+  if (output?.b64_json) {
+    return output.b64_json;
+  }
+
+  if (output?.base64) {
+    return stripDataUrlPrefix(output.base64);
+  }
+
+  throw new Error(`No generated image returned from image API: ${JSON.stringify(data).slice(0, 500)}`);
 }
 
 export function buildImagePrompt(description, thoughts) {
@@ -138,6 +164,10 @@ async function imageUrlToBase64(imageUrl) {
 
   const buffer = Buffer.from(await response.arrayBuffer());
   return buffer.toString("base64");
+}
+
+function stripDataUrlPrefix(value) {
+  return value.replace(/^data:image\/\w+;base64,/, "");
 }
 
 function assertApiKey() {
