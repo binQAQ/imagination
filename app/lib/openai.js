@@ -1,4 +1,4 @@
-const TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || "gpt-5.5";
+const TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || "gpt-4o-mini";
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 
@@ -26,37 +26,28 @@ export async function generateThoughts(description) {
 ${description}
 `;
 
-  const data = await callOpenAI({
+  const data = await callOpenAI("/chat/completions", {
     model: TEXT_MODEL,
-    input: prompt,
-    reasoning: {
-      effort: "low",
-    },
-    text: {
-      verbosity: "low",
-      format: {
-        type: "json_schema",
-        name: "blind_visitor_thoughts",
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            thoughts: {
-              type: "array",
-              minItems: 5,
-              maxItems: 8,
-              items: {
-                type: "string",
-              },
-            },
-          },
-          required: ["thoughts"],
-        },
+    messages: [
+      {
+        role: "system",
+        content: "你只输出严格 JSON，不输出 markdown 或解释。",
       },
-    },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.8,
+    max_tokens: 600,
   });
 
-  const text = extractOutputText(data);
+  const text = data.choices?.[0]?.message?.content;
+
+  if (!text) {
+    throw new Error("No text returned from chat completions");
+  }
+
   const parsed = JSON.parse(text);
   return parsed.thoughts;
 }
@@ -64,29 +55,29 @@ ${description}
 export async function generateImage(prompt) {
   assertApiKey();
 
-  const data = await callOpenAI({
-    model: TEXT_MODEL,
-    input: prompt,
-    tool_choice: {
-      type: "image_generation",
-    },
-    tools: [
-      {
-        type: "image_generation",
-        model: IMAGE_MODEL,
-        size: "1536x1024",
-      },
-    ],
+  const data = await callOpenAI("/images/generations", {
+    model: IMAGE_MODEL,
+    prompt,
+    n: 1,
+    size: "1024x1024",
+    quality: "high",
+    response_format: "b64_json",
   });
 
-  const imageCall = data.output?.find((item) => item.type === "image_generation_call");
-  const imageBase64 = imageCall?.result;
+  const imageBase64 = data.data?.[0]?.b64_json;
+  const imageUrl = data.data?.[0]?.url;
 
-  if (!imageBase64) {
-    throw new Error("No generated image returned from OpenAI");
+  if (imageBase64) {
+    return imageBase64;
   }
 
-  return imageBase64;
+  if (imageUrl) {
+    return imageUrlToBase64(imageUrl);
+  }
+
+  if (!imageBase64 && !imageUrl) {
+    throw new Error("No generated image returned from OpenAI");
+  }
 }
 
 export function buildImagePrompt(description, thoughts) {
@@ -111,11 +102,11 @@ No text, no watermark, no photorealism, no direct museum UI, no frame.
 `;
 }
 
-async function callOpenAI(payload) {
+async function callOpenAI(endpoint, payload) {
   let response;
 
   try {
-    response = await fetch(`${OPENAI_BASE_URL}/responses`, {
+    response = await fetch(`${OPENAI_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -138,20 +129,15 @@ async function callOpenAI(payload) {
   return response.json();
 }
 
-function extractOutputText(data) {
-  if (typeof data.output_text === "string") {
-    return data.output_text;
+async function imageUrlToBase64(imageUrl) {
+  const response = await fetch(imageUrl);
+
+  if (!response.ok) {
+    throw new Error(`Failed to download generated image: ${response.status}`);
   }
 
-  for (const item of data.output || []) {
-    for (const content of item.content || []) {
-      if (content.type === "output_text" && content.text) {
-        return content.text;
-      }
-    }
-  }
-
-  throw new Error("No text returned from OpenAI");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return buffer.toString("base64");
 }
 
 function assertApiKey() {

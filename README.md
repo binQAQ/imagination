@@ -18,11 +18,15 @@ npm install
 OPENAI_API_KEY=你的 API Key
 ```
 
-如果你需要通过自己的兼容网关或部署环境转发 OpenAI API，也可以加：
+如果你使用 AIHubMix 或其他 OpenAI 兼容中转，需要加：
 
 ```text
-OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_BASE_URL=https://aihubmix.com/v1
+OPENAI_TEXT_MODEL=gpt-4o-mini
+OPENAI_IMAGE_MODEL=gpt-image-2
 ```
+
+其中 `OPENAI_BASE_URL` 请以你的中转站控制台/文档给出的地址为准，必须包含 `/v1`，不要写到 `/images/generations`。
 
 启动开发服务：
 
@@ -48,7 +52,7 @@ http://localhost:3000/api/health
 
 其中 `hasOpenAIKey` 应该是 `true`。
 
-如果游戏里显示 `OpenAI network request failed` 或 `fetch failed`，说明本机 Node 服务无法连接 OpenAI API。常见原因是代理/VPN 只覆盖了浏览器，没有覆盖 PowerShell/Node 进程。正式部署到 Vercel 后通常不会遇到这个本地网络问题。
+如果游戏里显示 `OpenAI network request failed` 或 `fetch failed`，说明本机 Node 服务无法连接 API 地址。常见原因是代理/VPN 只覆盖了浏览器，没有覆盖 PowerShell/Node 进程。正式部署到 Vercel 后通常不会遇到这个本地网络问题。
 
 ## 部署
 
