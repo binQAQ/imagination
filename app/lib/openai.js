@@ -55,7 +55,34 @@ ${description}
 export async function generateImage(prompt) {
   assertApiKey();
 
-  const data = await callOpenAI(`/models/openai/${IMAGE_MODEL}/predictions`, {
+  const data = await callOpenAI(getImageEndpoint(IMAGE_MODEL), buildImagePayload(prompt));
+
+  return extractImageSource(data);
+}
+
+function getImageEndpoint(model) {
+  if (isOpenAIImageModel(model)) {
+    return "/images/generations";
+  }
+
+  return `/models/${model}/predictions`;
+}
+
+function buildImagePayload(prompt) {
+  if (isOpenAIImageModel(IMAGE_MODEL)) {
+    return {
+      model: IMAGE_MODEL,
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "high",
+      moderation: "low",
+      background: "auto",
+      output_format: "png",
+    };
+  }
+
+  return {
     input: {
       prompt,
       n: 1,
@@ -65,45 +92,123 @@ export async function generateImage(prompt) {
       background: "auto",
       output_format: "png",
     },
-  });
-
-  return extractImageBase64(data);
+  };
 }
 
-function extractImageBase64(data) {
-  const openAICompatible = data.data?.[0];
+function isOpenAIImageModel(model) {
+  return /^(gpt-image|dall-e)/i.test(model);
+}
 
-  if (openAICompatible?.b64_json) {
-    return openAICompatible.b64_json;
-  }
+function extractImageSource(data) {
+  const directCandidates = [
+    data.data?.[0]?.b64_json,
+    data.data?.[0]?.base64,
+    data.data?.[0]?.url,
+    data.output?.[0]?.result,
+    data.output?.[0]?.image_url,
+    data.output?.[0]?.b64_json,
+    data.output?.[0]?.base64,
+    data.output?.[0]?.url,
+    data.output?.[0]?.content?.[0]?.image_url,
+    data.output?.[0]?.content?.[0]?.url,
+    data.output?.[0]?.content?.[0]?.b64_json,
+    data.output?.[0]?.content?.[0]?.base64,
+    data.images?.[0]?.b64_json,
+    data.images?.[0]?.base64,
+    data.images?.[0]?.url,
+    data.image?.b64_json,
+    data.image?.base64,
+    data.image?.url,
+    data.image_url,
+    data.b64_json,
+    data.base64,
+    data.url,
+  ];
 
-  if (openAICompatible?.url) {
-    return imageUrlToBase64(openAICompatible.url);
-  }
+  for (const candidate of directCandidates) {
+    const imageSource = normalizeImageSource(candidate);
 
-  const output = data.output?.[0] || data.images?.[0] || data.image;
-
-  if (typeof output === "string") {
-    if (output.startsWith("http")) {
-      return imageUrlToBase64(output);
+    if (imageSource) {
+      return imageSource;
     }
-
-    return stripDataUrlPrefix(output);
   }
 
-  if (output?.url) {
-    return imageUrlToBase64(output.url);
-  }
+  const nestedImageSource = findNestedImageSource(data);
 
-  if (output?.b64_json) {
-    return output.b64_json;
-  }
-
-  if (output?.base64) {
-    return stripDataUrlPrefix(output.base64);
+  if (nestedImageSource) {
+    return nestedImageSource;
   }
 
   throw new Error(`No generated image returned from image API: ${JSON.stringify(data).slice(0, 500)}`);
+}
+
+function findNestedImageSource(value, seen = new Set()) {
+  if (!value || typeof value !== "object" || seen.has(value)) {
+    return null;
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const imageSource = normalizeImageSource(item) || findNestedImageSource(item, seen);
+
+      if (imageSource) {
+        return imageSource;
+      }
+    }
+
+    return null;
+  }
+
+  const preferredKeys = [
+    "b64_json",
+    "base64",
+    "url",
+    "image_url",
+    "result",
+    "image",
+    "images",
+    "data",
+    "output",
+    "content",
+  ];
+
+  for (const key of preferredKeys) {
+    const imageSource = normalizeImageSource(value[key]) || findNestedImageSource(value[key], seen);
+
+    if (imageSource) {
+      return imageSource;
+    }
+  }
+
+  return null;
+}
+
+function normalizeImageSource(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const imageSource = value.trim();
+
+  if (!imageSource) {
+    return null;
+  }
+
+  if (/^data:image\/\w+;base64,/i.test(imageSource) || /^https?:\/\//i.test(imageSource)) {
+    return imageSource;
+  }
+
+  if (looksLikeImageBase64(imageSource)) {
+    return `data:image/png;base64,${stripDataUrlPrefix(imageSource).replace(/\s/g, "")}`;
+  }
+
+  return null;
+}
+
+function looksLikeImageBase64(value) {
+  return value.length > 500 && /^[A-Za-z0-9+/=\r\n]+$/.test(value);
 }
 
 export function buildImagePrompt(description, thoughts) {
@@ -155,19 +260,8 @@ async function callOpenAI(endpoint, payload) {
   return response.json();
 }
 
-async function imageUrlToBase64(imageUrl) {
-  const response = await fetch(imageUrl);
-
-  if (!response.ok) {
-    throw new Error(`Failed to download generated image: ${response.status}`);
-  }
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return buffer.toString("base64");
-}
-
 function stripDataUrlPrefix(value) {
-  return value.replace(/^data:image\/\w+;base64,/, "");
+  return value.replace(/^data:image\/\w+;base64,/i, "");
 }
 
 function assertApiKey() {

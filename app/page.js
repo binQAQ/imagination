@@ -216,6 +216,11 @@ async function requestImage(description, thoughts) {
   }
 
   const data = await response.json();
+
+  if (!data.imageDataUrl) {
+    throw new Error("image API returned no imageDataUrl");
+  }
+
   return data.imageDataUrl;
 }
 
@@ -230,7 +235,7 @@ function drawApiImage(canvas, imageDataUrl) {
       resolve();
     };
 
-    image.onerror = reject;
+    image.onerror = () => reject(new Error("generated image could not be loaded by the browser"));
     image.src = imageDataUrl;
   });
 }

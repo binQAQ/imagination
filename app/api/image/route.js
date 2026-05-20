@@ -11,10 +11,10 @@ export async function POST(request) {
     }
 
     const imagePrompt = buildImagePrompt(description, thoughts);
-    const imageBase64 = await generateImage(imagePrompt);
+    const imageDataUrl = await generateImage(imagePrompt);
 
     return Response.json({
-      imageDataUrl: `data:image/png;base64,${imageBase64}`,
+      imageDataUrl,
     });
   } catch (error) {
     console.error(error);
