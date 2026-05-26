@@ -1,6 +1,8 @@
 import {
   buildImagePrompt,
+  buildGuidePrompt,
   buildThoughtsPrompt,
+  guideSystemPrompt,
   imageGenerationSettings,
   thoughtsSystemPrompt,
 } from "./gameConfig";
@@ -36,6 +38,34 @@ export async function generateThoughts(description) {
 
   const parsed = JSON.parse(text);
   return parsed.thoughts;
+}
+
+export async function generateGuideResponse({ history, latestAnswer, round, maxRounds }) {
+  assertApiKey();
+
+  const data = await callOpenAI("/chat/completions", {
+    model: TEXT_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: guideSystemPrompt,
+      },
+      {
+        role: "user",
+        content: buildGuidePrompt({ history, latestAnswer, round, maxRounds }),
+      },
+    ],
+    temperature: 0.82,
+    max_tokens: 500,
+  });
+
+  const text = data.choices?.[0]?.message?.content;
+
+  if (!text) {
+    throw new Error("No text returned from guide completions");
+  }
+
+  return JSON.parse(text);
 }
 
 export async function generateImage(prompt) {
