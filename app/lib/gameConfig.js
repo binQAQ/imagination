@@ -60,6 +60,8 @@ export function buildGuidePrompt({ history, latestAnswer, round, maxRounds }) {
 - 不要提到 AI、提示词、生成图片。
 - 如果玩家的感受已经明确，并且画面内容与理解已经足够清晰，可以结束追问。
 - 最多 ${maxRounds} 轮；当前是第 ${round} 轮。第 ${maxRounds} 轮必须结束追问。
+- prefix 和 suggestion 不是盲人的话，而是替玩家开头的第一人称续写句。
+- prefix 和 suggestion 必须模仿玩家正在观看画作时的视角，例如“我觉得”“我看见”“我说不清”，不能写成盲人的感受。
 
 请根据对话判断下一步。
 
@@ -73,16 +75,17 @@ ${latestAnswer}
 {
   "done": false,
   "speech": "盲人对玩家回答的短回应，并提出下一问",
-  "prefix": "下一轮输入框中不可删除的前半句",
-  "suggestion": "下一轮输入框中的浅色后半句提示"
+  "prefix": "下一轮输入框中不可删除的玩家视角前半句",
+  "suggestion": "下一轮输入框中的玩家视角浅色后半句提示"
 }
 
 字段规则：
 - done 为 true 时，speech 写一句准备进入想象的过渡话，prefix 和 suggestion 为空字符串。
 - done 为 false 时，speech 必须包含一个自然的追问。
 - speech 30 到 70 个汉字。
-- prefix 6 到 18 个汉字，必须是未完成的半句话，适合玩家接着写。
-- suggestion 12 到 35 个汉字，是可被玩家覆盖的后半句示例。
+- prefix 6 到 18 个汉字，必须是玩家视角的未完成半句话，适合玩家接着写。
+- suggestion 12 到 35 个汉字，是可被玩家覆盖的玩家视角后半句示例。
+- prefix 和 suggestion 合起来必须能成为同一行里连续的一句话。
 - prefix 和 suggestion 要有文学性，但不能替玩家预设具体画面事实。
 - 只输出 JSON。
 `;
