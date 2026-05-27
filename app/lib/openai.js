@@ -1,5 +1,6 @@
 import {
   buildImagePrompt,
+  buildImagePromptPartsPrompt,
   buildGuidePrompt,
   buildThoughtsPrompt,
   guideSystemPrompt,
@@ -28,7 +29,7 @@ export async function generateThoughts(description) {
     model: TEXT_MODEL,
     messages,
     temperature: 0.8,
-    max_tokens: 600,
+    max_tokens: 900,
   });
 
   const text = data.choices?.[0]?.message?.content;
@@ -100,6 +101,43 @@ export async function generateImage(prompt) {
       model: IMAGE_MODEL,
       payload,
       rawResponseSummary: summarizeImageResponse(data),
+    },
+  };
+}
+
+export async function generateImagePromptParts(description, thoughts) {
+  assertApiKey();
+  const messages = [
+    {
+      role: "system",
+      content: "You output strict JSON only. Do not output markdown or explanation.",
+    },
+    {
+      role: "user",
+      content: buildImagePromptPartsPrompt(description, thoughts),
+    },
+  ];
+
+  const data = await callOpenAI("/chat/completions", {
+    model: TEXT_MODEL,
+    messages,
+    temperature: 0.65,
+    max_tokens: 900,
+  });
+
+  const text = data.choices?.[0]?.message?.content;
+
+  if (!text) {
+    throw new Error("No text returned from image prompt parts completions");
+  }
+
+  return {
+    promptParts: JSON.parse(text),
+    debug: {
+      endpoint: "/chat/completions",
+      model: TEXT_MODEL,
+      messages,
+      rawText: text,
     },
   };
 }

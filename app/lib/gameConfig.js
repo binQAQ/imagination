@@ -13,7 +13,7 @@ export function buildThoughtsPrompt(description) {
 规则：
 - 输出 JSON，格式为 {"thoughts":["..."]}。
 - 只输出 JSON，不要 markdown。
-- 5 到 8 句。
+- 10 到 13 句。
 - 每句 15 到 35 个汉字。
 - 第一人称。
 - 具体但克制。
@@ -31,9 +31,9 @@ export const thoughtsSystemPrompt = "你只输出严格 JSON，不输出 markdow
 export const guideSystemPrompt = "你只输出严格 JSON，不输出 markdown 或解释。";
 
 export const firstGuideTurn = {
-  speech: "在你开口之前，请先告诉我：看到这幅画的一刻，你心里最先出现的情绪是什么？",
+  speech: "请你告诉我这幅画画了什么，你感受到了什么？",
   prefix: "我第一眼感到",
-  suggestion: "，像是画面里有什么正慢慢压过来。",
+  suggestion: "，画面中有什么正在压过来，克制而真实。",
 };
 
 export function buildGuidePrompt({ history, latestAnswer, round, maxRounds }) {
@@ -106,12 +106,40 @@ ${latestAnswer}
 
 export function buildImagePrompt(description, thoughts) {
   return `
-Create the blind museum visitor's imagined painting based only on the player's description and the visitor's inner thoughts.
+Style prompt:
+${description.stylePrompt}
 
-Player description:
+Content prompt:
+${description.contentPrompt}
+
+Use the style prompt to control visual language, medium, surface, light, color, and composition rhythm.
+Use the content prompt to control subject matter, scene, objects, relationships, and emotional meaning.
+`;
+}
+
+export function buildImagePromptPartsPrompt(description, thoughts) {
+  return `
+你正在把一段美术馆导览对话转化为图像生成提示词。
+输入包括：玩家对画作的描述、盲人的追问、玩家的补充回答，以及盲人在想象时的自言自语。
+
+你的任务：
+1. 解读所有输入，而不是照抄原句。
+2. 输出两个英文提示词字段：
+   - stylePrompt：只描述视觉风格、媒介、笔触、材质、构图节奏、光线、色彩、画面气质。
+   - contentPrompt：只描述画面内容、主体、空间关系、动作、物体、氛围、玩家的情感和解读。
+3. 如果玩家没有明确说到某个细节，不要编造具体事实；可以使用不确定、含混、被听见后重组的表达。
+4. 不要提到具体名画名称、画家姓名、博物馆 UI、玩家、盲人、AI、提示词。
+
+输出 JSON，格式为：
+{
+  "stylePrompt": "...",
+  "contentPrompt": "..."
+}
+
+玩家与盲人的完整对话：
 ${description}
 
-Blind visitor thoughts:
+盲人的想象自言自语：
 ${thoughts.join("\n")}
 `;
 }

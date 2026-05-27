@@ -1,4 +1,4 @@
-import { buildImagePrompt, generateImage } from "../../lib/openai";
+import { buildImagePrompt, generateImage, generateImagePromptParts } from "../../lib/openai";
 
 export async function POST(request) {
   try {
@@ -10,12 +10,15 @@ export async function POST(request) {
       return Response.json({ error: "description is required" }, { status: 400 });
     }
 
-    const imagePrompt = buildImagePrompt(description, thoughts);
+    const { promptParts, debug: promptPartsDebug } = await generateImagePromptParts(description, thoughts);
+    const imagePrompt = buildImagePrompt(promptParts, thoughts);
     const { imageDataUrl, debug } = await generateImage(imagePrompt);
 
     return Response.json({
       imageDataUrl,
       debug: {
+        promptParts,
+        promptPartsDebug,
         imagePrompt,
         ...debug,
         imageDataUrlSummary: summarizeImageDataUrl(imageDataUrl),

@@ -15,10 +15,20 @@ const palette = [
 
 const MAX_DIALOGUE_ROUNDS = 5;
 const FIRST_GUIDE_TURN = {
-  speech: "在你开口之前，请先告诉我：看到这幅画的一刻，你心里最先出现的情绪是什么？",
+  speech: "请你告诉我这幅画画了什么，你感受到了什么？",
   prefix: "我第一眼感到",
-  suggestion: "，像是画面里有什么正慢慢压过来。",
+  suggestion: "，画面中有什么正在压过来，克制而真实。",
 };
+
+const LISTENING_LINES = [
+  "我把你的话先放在心里。",
+  "请稍等，我正在顺着你的描述摸索。",
+  "我感受到了了一点轮廓……",
+  "你的句子正在让我靠近那幅画。",
+  "这幅画似乎变得更清楚了。",
+  "我听着，像我能看到这幅画一般。",
+  "我正在把它一点点拼起来。",
+];
 
 export default function Home() {
   const stageRef = useRef(null);
@@ -82,6 +92,7 @@ export default function Home() {
     setIsRevealed(false);
     setHasResult(false);
     setStatus("正在倾听");
+    setSpeech(getRandomListeningLine());
 
     const answer = `${answerPrefix}${text}`;
     const nextTurns = [
@@ -416,6 +427,10 @@ function buildGuideFallback(round, answer) {
   };
 }
 
+function getRandomListeningLine() {
+  return LISTENING_LINES[Math.floor(Math.random() * LISTENING_LINES.length)];
+}
+
 function createSessionId() {
   return `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -518,6 +533,11 @@ function buildThoughts(description) {
       : "我听见一种缓慢的沉默，好像画里的人不愿打扰彼此。",
     "我开始把这些形状拼起来：土地、衣褶、弯下去的背。",
     "它在我脑中变成一幅粗粝的画，边线深，颜色旧，光很低。",
+    "有些地方我仍看不清，只能让它们停在阴影里。",
+    "我把你说过的颜色放得很轻，像怕惊动那些人。",
+    "画面的边缘慢慢退开，中间留下沉默的动作。",
+    "我感觉这不是一瞬间，而是一整天压下来的重量。",
+    "最后它聚成一幅安静的图，像听见之后才出现的风景。",
   ];
 }
 
