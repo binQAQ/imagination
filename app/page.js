@@ -24,6 +24,7 @@ export default function Home() {
   const stageRef = useRef(null);
   const canvasRef = useRef(null);
   const timerRef = useRef(null);
+  const sessionIdRef = useRef(createSessionId());
   const [description, setDescription] = useState("");
   const [speech, setSpeech] = useState(FIRST_GUIDE_TURN.speech);
   const [status, setStatus] = useState("第 1/5 轮感受");
@@ -37,6 +38,10 @@ export default function Home() {
   const [hasResult, setHasResult] = useState(false);
 
   useEffect(() => {
+    logGameEvent(sessionIdRef.current, "session-start", {
+      firstQuestion: FIRST_GUIDE_TURN.speech,
+    });
+
     function updateStageScale() {
       const stage = stageRef.current;
       if (!stage) return;
@@ -86,6 +91,13 @@ export default function Home() {
         answer,
       },
     ];
+    logGameEvent(sessionIdRef.current, "player-answer", {
+      round,
+      question: currentQuestion,
+      prefix: answerPrefix,
+      typedText: text,
+      submittedAnswer: answer,
+    });
 
     if (round >= MAX_DIALOGUE_ROUNDS) {
       await finishDialogue(nextTurns, "我听见了。你的感受已经有了形状，现在让我试着把它想象出来。");
@@ -97,6 +109,14 @@ export default function Home() {
         history: dialogueTurns,
         latestAnswer: answer,
         round,
+      });
+      logGameEvent(sessionIdRef.current, "api-dialogue", {
+        request: {
+          history: dialogueTurns,
+          latestAnswer: answer,
+          round,
+        },
+        response: guide,
       });
 
       if (guide.done) {
@@ -116,6 +136,15 @@ export default function Home() {
     } catch (error) {
       console.warn("Falling back to local guide.", error);
       const fallback = buildGuideFallback(round, answer);
+      logGameEvent(sessionIdRef.current, "api-dialogue-error", {
+        request: {
+          history: dialogueTurns,
+          latestAnswer: answer,
+          round,
+        },
+        error: error.message,
+        fallback,
+      });
 
       if (fallback.done) {
         await finishDialogue(nextTurns, fallback.speech);
@@ -144,14 +173,24 @@ export default function Home() {
     setAnswerPrefix("");
     setAnswerSuggestion("");
     setStatus("正在想象");
+    logGameEvent(sessionIdRef.current, "dialogue-finished", {
+      turns,
+      fullDescription,
+      transitionSpeech,
+    });
 
-    const apiThoughts = await requestThoughts(fullDescription, setStatus);
+    const apiThoughts = await requestThoughts(fullDescription, setStatus, sessionIdRef.current);
     const thoughts = apiThoughts?.length ? apiThoughts : buildThoughts(fullDescription);
-    const imagePromise = requestImage(fullDescription, thoughts)
+    const imagePromise = requestImage(fullDescription, thoughts, sessionIdRef.current)
       .then((imageDataUrl) => drawApiImage(canvasRef.current, imageDataUrl))
       .catch((error) => {
         console.warn("Falling back to local painting.", error);
         setStatus(`图像接口失败，使用本地绘画：${error.message}`);
+        logGameEvent(sessionIdRef.current, "api-image-error", {
+          description: fullDescription,
+          thoughts,
+          error: error.message,
+        });
         drawImaginedPainting(canvasRef.current, fullDescription);
       });
 
@@ -179,6 +218,10 @@ export default function Home() {
         setStatus("想象完成");
         setIsRevealed(true);
         setHasResult(true);
+        logGameEvent(sessionIdRef.current, "session-complete", {
+          dialogueTurns,
+          thoughtCount: thoughts.length,
+        });
       });
     }, 3000);
   }
@@ -197,6 +240,10 @@ export default function Home() {
     setDialogueTurns([]);
     setRound(1);
     setDescription("");
+    sessionIdRef.current = createSessionId();
+    logGameEvent(sessionIdRef.current, "session-start", {
+      firstQuestion: FIRST_GUIDE_TURN.speech,
+    });
   }
 
   return (
@@ -243,6 +290,9 @@ export default function Home() {
               <button id="resetButton" type="button" hidden={!hasResult} onClick={resetGame}>
                 再讲一次
               </button>
+              <button id="exportButton" type="button" hidden={!hasResult} onClick={exportGameLogs}>
+                导出记录
+              </button>
             </div>
           </form>
         </div>
@@ -282,7 +332,7 @@ async function requestDialogue({ history, latestAnswer, round }) {
   return response.json();
 }
 
-async function requestThoughts(description, setStatus) {
+async function requestThoughts(description, setStatus, sessionId) {
   try {
     const response = await fetch("/api/thoughts", {
       method: "POST",
@@ -298,15 +348,23 @@ async function requestThoughts(description, setStatus) {
     }
 
     const data = await response.json();
+    logGameEvent(sessionId, "api-thoughts", {
+      request: { description },
+      response: data,
+    });
     return data.thoughts;
   } catch (error) {
     console.warn("Falling back to local thoughts.", error);
     setStatus(`文字接口失败，使用本地文案：${error.message}`);
+    logGameEvent(sessionId, "api-thoughts-error", {
+      request: { description },
+      error: error.message,
+    });
     return null;
   }
 }
 
-async function requestImage(description, thoughts) {
+async function requestImage(description, thoughts, sessionId) {
   const response = await fetch("/api/image", {
     method: "POST",
     headers: {
@@ -321,6 +379,13 @@ async function requestImage(description, thoughts) {
   }
 
   const data = await response.json();
+  logGameEvent(sessionId, "api-image", {
+    request: { description, thoughts },
+    response: {
+      ...data,
+      imageDataUrl: summarizeImageDataUrl(data.imageDataUrl),
+    },
+  });
 
   if (!data.imageDataUrl) {
     throw new Error("image API returned no imageDataUrl");
@@ -345,10 +410,70 @@ function buildGuideFallback(round, answer) {
 
   return {
     done: false,
-    speech: "你说的感觉还在我手边，但它的来源仍有些模糊。画面里的什么让这种感觉变得更重？",
-    prefix: "这种感觉来自",
-    suggestion: "，它不像一个物体，更像一阵停住的空气。",
+    speech: "我听见了这种感觉。为了让我看清它，请告诉我：画面里的主体、颜色或光线，哪一样最先把它推到你面前？",
+    prefix: "我最先看见",
+    suggestion: "，它让整幅画的情绪变得更清楚。",
   };
+}
+
+function createSessionId() {
+  return `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function logGameEvent(sessionId, type, payload) {
+  if (typeof window === "undefined" || !sessionId) return;
+
+  try {
+    const key = "imagination-game-logs";
+    const logs = JSON.parse(window.localStorage.getItem(key) || "[]");
+    let session = logs.find((item) => item.sessionId === sessionId);
+
+    if (!session) {
+      session = {
+        sessionId,
+        startedAt: new Date().toISOString(),
+        events: [],
+      };
+      logs.unshift(session);
+    }
+
+    session.updatedAt = new Date().toISOString();
+    session.events.push({
+      type,
+      at: new Date().toISOString(),
+      payload,
+    });
+
+    window.localStorage.setItem(key, JSON.stringify(logs.slice(0, 25)));
+  } catch (error) {
+    console.warn("Failed to write game log.", error);
+  }
+}
+
+function summarizeImageDataUrl(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return {
+    type: value.startsWith("data:image") ? "base64-data-url" : "url",
+    length: value.length,
+    preview: value.slice(0, 120),
+  };
+}
+
+function exportGameLogs() {
+  if (typeof window === "undefined") return;
+
+  const logs = window.localStorage.getItem("imagination-game-logs") || "[]";
+  const blob = new Blob([logs], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = `imagination-game-logs-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function drawApiImage(canvas, imageDataUrl) {

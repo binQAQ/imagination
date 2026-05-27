@@ -11,10 +11,15 @@ export async function POST(request) {
     }
 
     const imagePrompt = buildImagePrompt(description, thoughts);
-    const imageDataUrl = await generateImage(imagePrompt);
+    const { imageDataUrl, debug } = await generateImage(imagePrompt);
 
     return Response.json({
       imageDataUrl,
+      debug: {
+        imagePrompt,
+        ...debug,
+        imageDataUrlSummary: summarizeImageDataUrl(imageDataUrl),
+      },
     });
   } catch (error) {
     console.error(error);
@@ -26,4 +31,16 @@ export async function POST(request) {
       { status: 500 },
     );
   }
+}
+
+function summarizeImageDataUrl(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return {
+    type: value.startsWith("data:image") ? "base64-data-url" : "url",
+    length: value.length,
+    preview: value.slice(0, 120),
+  };
 }

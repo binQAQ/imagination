@@ -9,8 +9,8 @@ export async function POST(request) {
       return Response.json({ error: "description is required" }, { status: 400 });
     }
 
-    const thoughts = await generateThoughts(description);
-    return Response.json({ thoughts });
+    const { thoughts, debug } = await generateThoughts(description);
+    return Response.json({ thoughts, debug });
   } catch (error) {
     console.error(error);
     return Response.json(

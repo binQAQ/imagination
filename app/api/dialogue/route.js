@@ -18,7 +18,7 @@ export async function POST(request) {
       return Response.json({ error: "latestAnswer is required" }, { status: 400 });
     }
 
-    const guide = await generateGuideResponse({
+    const { guide, debug } = await generateGuideResponse({
       history,
       latestAnswer,
       round,
@@ -30,6 +30,8 @@ export async function POST(request) {
       speech: String(guide.speech || ""),
       prefix: String(guide.prefix || ""),
       suggestion: String(guide.suggestion || ""),
+      missingDimension: String(guide.missingDimension || ""),
+      debug,
     });
   } catch (error) {
     console.error(error);

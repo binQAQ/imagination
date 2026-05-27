@@ -13,19 +13,20 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v
 
 export async function generateThoughts(description) {
   assertApiKey();
+  const messages = [
+    {
+      role: "system",
+      content: thoughtsSystemPrompt,
+    },
+    {
+      role: "user",
+      content: buildThoughtsPrompt(description),
+    },
+  ];
 
   const data = await callOpenAI("/chat/completions", {
     model: TEXT_MODEL,
-    messages: [
-      {
-        role: "system",
-        content: thoughtsSystemPrompt,
-      },
-      {
-        role: "user",
-        content: buildThoughtsPrompt(description),
-      },
-    ],
+    messages,
     temperature: 0.8,
     max_tokens: 600,
   });
@@ -37,24 +38,33 @@ export async function generateThoughts(description) {
   }
 
   const parsed = JSON.parse(text);
-  return parsed.thoughts;
+  return {
+    thoughts: parsed.thoughts,
+    debug: {
+      endpoint: "/chat/completions",
+      model: TEXT_MODEL,
+      messages,
+      rawText: text,
+    },
+  };
 }
 
 export async function generateGuideResponse({ history, latestAnswer, round, maxRounds }) {
   assertApiKey();
+  const messages = [
+    {
+      role: "system",
+      content: guideSystemPrompt,
+    },
+    {
+      role: "user",
+      content: buildGuidePrompt({ history, latestAnswer, round, maxRounds }),
+    },
+  ];
 
   const data = await callOpenAI("/chat/completions", {
     model: TEXT_MODEL,
-    messages: [
-      {
-        role: "system",
-        content: guideSystemPrompt,
-      },
-      {
-        role: "user",
-        content: buildGuidePrompt({ history, latestAnswer, round, maxRounds }),
-      },
-    ],
+    messages,
     temperature: 0.82,
     max_tokens: 500,
   });
@@ -65,15 +75,33 @@ export async function generateGuideResponse({ history, latestAnswer, round, maxR
     throw new Error("No text returned from guide completions");
   }
 
-  return JSON.parse(text);
+  return {
+    guide: JSON.parse(text),
+    debug: {
+      endpoint: "/chat/completions",
+      model: TEXT_MODEL,
+      messages,
+      rawText: text,
+    },
+  };
 }
 
 export async function generateImage(prompt) {
   assertApiKey();
+  const endpoint = getImageEndpoint(IMAGE_MODEL);
+  const payload = buildImagePayload(prompt);
 
-  const data = await callOpenAI(getImageEndpoint(IMAGE_MODEL), buildImagePayload(prompt));
+  const data = await callOpenAI(endpoint, payload);
 
-  return extractImageSource(data);
+  return {
+    imageDataUrl: extractImageSource(data),
+    debug: {
+      endpoint,
+      model: IMAGE_MODEL,
+      payload,
+      rawResponseSummary: summarizeImageResponse(data),
+    },
+  };
 }
 
 function getImageEndpoint(model) {
@@ -228,6 +256,18 @@ function looksLikeImageBase64(value) {
 }
 
 export { buildImagePrompt };
+
+function summarizeImageResponse(data) {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) => {
+      if (typeof value === "string" && value.length > 260) {
+        return `${value.slice(0, 120)}... [${value.length} chars]`;
+      }
+
+      return value;
+    }),
+  );
+}
 
 async function callOpenAI(endpoint, payload) {
   let response;
